@@ -1,10 +1,12 @@
+import re
+import uuid
+
 import pandas as pd
 from langdetect import detect
-from tqdm import tqdm
-import re
-from src.utils_ import to_parquet
 from nltk.tokenize import sent_tokenize
-import uuid
+from tqdm import tqdm
+
+from src.utils_ import to_parquet
 
 INPUT_PATH = "data/transform/tmp"
 OUTPUT_PATH = "data/transform/tmp"
@@ -84,6 +86,7 @@ def _contains_quotation(sentence):
     # Search for the pattern in the sentence
     return re.search(pattern, sentence) is not None
 
+
 def _split_into_sentences(article_text, title):
     """
     Splits an article text into sentences.
@@ -108,6 +111,7 @@ def _split_into_sentences(article_text, title):
     ]
     return sentences
 
+
 @to_parquet(f"{OUTPUT_PATH}/sentences.parquet")
 def main():
     df = pd.read_parquet(f"{INPUT_PATH}/sentences.parquet")
@@ -115,6 +119,7 @@ def main():
     df = df[df.sentence != ""]
     df = df[~df.sentence.isna()]
     df["approx_len"] = df["sentence"].apply(lambda x: len(x.split(" ")))
+    df = df[~df.sentence.duplicated()]
     df = df[df.approx_len > 10]
     df["sentence"] = df["sentence"].progress_apply(_unify_text)
     df = df[~df.sentence.apply(_starts_with_lowercase)]

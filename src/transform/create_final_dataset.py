@@ -1,4 +1,5 @@
 import pandas as pd
+
 from src.utils_ import to_parquet
 
 INPUT_PATH = "data/transform/tmp"
@@ -36,7 +37,8 @@ def main():
     sentences = pd.read_parquet(f"{INPUT_PATH}/sentences.parquet")
 
     df = articles.merge(sentences, on="article_id").merge(
-        outlets, on="outlet_id"
+        outlets,
+        on="outlet_id",
     )
     df = df.reset_index(drop=True)
 
@@ -45,8 +47,21 @@ def main():
     ).astype(int)
     df["media_bias"] = (df.bias_estimate >= 0.5).astype(int)
     df["bias_rating_adfontes"] = df.bias.apply(_discretize)
-    df = df[df.bias_rating == df.bias_rating_adfontes]
-    df["trustworthy"] = (df["reliability"] >= 0.5).astype(int)
+
+    # df = df[df.bias_rating == df.bias_rating_adfontes] # TOO STRICT
+    mapping = {
+        "Left": -2,
+        "Lean Left": -1,
+        "Center": 0,
+        "Lean Right": 1,
+        "Right": 2,
+    }
+    df["allsides"] = df.bias_rating.apply(lambda x: mapping[x])
+    df["adfontes"] = df.bias_rating_adfontes.apply(lambda x: mapping[x])
+    df["disagreement"] = abs(df.allsides - df.adfontes)
+    df = df[df["disagreement"] < 2]
+
+    df = df[~df.sentence.str.contains("I ")]
 
     df = (
         df.groupby(["bias_rating"])
@@ -55,7 +70,7 @@ def main():
     )
 
     def sample_(group):
-        size_ = min(len(group), 18000)
+        size_ = min(len(group), 15000)
         return group.sample(n=size_)
 
     df = df.groupby("bias_rating").apply(sample_).reset_index(drop=True)
@@ -66,7 +81,6 @@ def main():
             "uni_source",
             "media_bias",
             "uncertain",
-            "topic",
             "sentence_id",
             "article_id",
         ]
@@ -80,7 +94,7 @@ def main():
             "uni_source": "source_name",
             "media_bias": "bias_estimate",
             "uncertain": "model_uncertainity",
-        }
+        },
     )
 
     final = df[
@@ -88,7 +102,6 @@ def main():
             "text",
             "source_party",
             "source_name",
-            "topic",
             "bias_estimate",
             "model_uncertainity",
             "sentence_id",
